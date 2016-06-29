@@ -119,7 +119,11 @@ class StreamHandler
         }
 
         if ($sink !== $stream) {
-            $this->drain($stream, $sink);
+            $this->drain(
+                $stream,
+                $sink,
+                $response->getHeaderLine("Content-Length")
+            );
         }
 
         $this->invokeStats($options, $request, $startTime, $response, null);
@@ -181,13 +185,26 @@ class StreamHandler
      *
      * @param StreamInterface $source
      * @param StreamInterface $sink
+     * @param null|int        $contentLength Amount of data to read.
      *
      * @return StreamInterface
      * @throws \RuntimeException when the sink option is invalid.
      */
-    private function drain(StreamInterface $source, StreamInterface $sink)
-    {
-        Psr7\copy_to_stream($source, $sink);
+    private function drain(
+        StreamInterface $source,
+        StreamInterface $sink,
+        $contentLength = null
+    ) {
+        // If a content-length header is provided, then stop reading once
+        // that number of bytes has been read. This can prevent infinitely
+        // reading from a stream when dealing with servers that do not honor
+        // Connection: Close headers.
+        if (is_numeric($contentLength)) {
+            Psr7\copy_to_stream($source, $sink, (int) $contentLength);
+        } else {
+            Psr7\copy_to_stream($source, $sink);
+        }
+
         $sink->seek(0);
         $source->close();
 
